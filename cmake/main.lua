@@ -1,14 +1,14 @@
-local interface_description = require "interface_description"
+local Interface = require "interface"
 
-function explainInterface()
-	print('boop')
+local face = {}
+
+function make_interface()
+	face = Interface:new()
+	face:callAction("runCMake");
+	return face.items
 end
 
-function runCMake()
-	local cmake = Process.new()
-	cmake.run()
-end
-
+--[[
 function runAction(id)
 	print(id)
 	
@@ -32,3 +32,4 @@ function runAction(id)
 	local status = proc:get_exit_status()
 	print(status);
 end
+--]]
