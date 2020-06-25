@@ -37,11 +37,16 @@ function Cmake:load_options()
 				self.options:load(content)
 				if (self.options:patch()) then
 					local result = self.project_control:save_project_file(options_file_name, self.options:get_template())
+					if (result ~= 0) then
+						self.streamer:send_error("could not save project file template", ErrorTypes.io, "")
+					end
 					-- TODO! Send error on stream if patched file could not be saved
 				end
 			else
 				local result = self.project_control:save_project_file(options_file_name, self.options:get_template())
-				-- TODO! Send error on stream
+				if (result ~= 0) then
+					self.streamer:send_error("could not save project file", ErrorTypes.io, "")
+				end
 			end
 		end
 		return setup_result
@@ -59,6 +64,7 @@ end
 
 function Cmake:run_cmake()
 	self:load_options()
+	self.streamer:send_info("run CMake", "")
 	print("run CMake")
 end
 
@@ -214,6 +220,7 @@ function Cmake:init()
 	)
 	self.project_control = ProjectControl:new()
 	self.options = CmakeOptions:new()
+	self.streamer = Streamer:new()
 end
 
 function Cmake:callAction(id)
