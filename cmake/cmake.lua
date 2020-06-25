@@ -1,6 +1,6 @@
 local libtoolbar = require "libtoolbar"
 local images = require "images"
-local CmakeOptions = requre "cmake_options"
+local CmakeOptions = require "cmake_options"
 
 local options_file_name = "cmake.json"
 
@@ -12,6 +12,7 @@ local function isempty(s)
   return s == nil or s == ''
 end
 
+-- Returns error string,  or nil
 function Cmake:setup_options() 
 	if (not self.project_control:has_active_project()) then
 		return "$NoSelectedActiveProject"
@@ -26,17 +27,39 @@ end
 
 function Cmake:load_options()
 	if (not self.options.loaded) then
+		self.project_control:update()
 		local setup_result = self:setup_options();
+		-- No error? Continue then
 		if (isempty(setup_result)) then
-			self.options:load(self.project_control:read_project_file(options_file_name))
+			local content = self.project_control:read_project_file(options_file_name);
+			-- Load options if existing
+			if (not isempty(content)) then
+				self.options:load(content)
+				if (self.options:patch()) then
+					local result = self.project_control:save_project_file(options_file_name, self.options:get_template())
+					-- TODO! Send error on stream if patched file could not be saved
+				end
+			else
+				local result = self.project_control:save_project_file(options_file_name, self.options:get_template())
+				-- TODO! Send error on stream
+			end
 		end
 		return setup_result
 	end
 	return nil
 end
 
+function Cmake:save_options()
+	local setup_result = self:setup_options();
+	if (isempty(setup_result)) then
+		self.project_control:save_project_file(options_file_name, self.options:get_json())
+	end
+	return setup_result
+end
+
 function Cmake:run_cmake()
-	print("run CMake");
+	self:load_options()
+	print("run CMake")
 end
 
 function Cmake:build()
