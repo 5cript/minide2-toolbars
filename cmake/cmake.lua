@@ -1,6 +1,7 @@
 local libtoolbar = require "libtoolbar"
 local images = require "images"
 local CmakeOptions = require "cmake_options"
+local json = require "json"
 
 local options_file_name = "cmake.json"
 
@@ -85,9 +86,42 @@ function Cmake:cancel()
 	print("cancel");
 end
 
+function Cmake::show_settings()
+	self.streamer:remote_call("showSettings", json.encode({
+		options_file_name = options_file_name
+	}))
+end
+
 function Cmake:init()
 	self.name = "CMake C/C++";
 	self.id = "cmake_toolbar";
+	libtoolbar.push_item
+	(
+		self,
+		{
+			id = "menu",
+			type = "Menu",
+			entries = 
+			{
+				{
+					label = "save",
+					pngbase64 = images.save,
+					special_actions = {"save"}
+				},
+				{
+					is_splitter = true
+				},
+				{
+					label = "settings",
+					action = function() Cmake.show_settings(self) end					
+				}
+			}
+		}
+	)
+	libtoolbar.push_splitter
+	(
+		self
+	)
 	libtoolbar.push_item
 	(
 		self,
