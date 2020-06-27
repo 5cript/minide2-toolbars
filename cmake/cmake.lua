@@ -37,13 +37,21 @@ function Cmake:load_options()
 			if (not isempty(content)) then
 				self.options:load(content)
 				if (self.options:patch()) then
-					local result = self.project_control:save_project_file(options_file_name, self.options:get_template())
+					self.streamer:send_info("saving patched settings file", "")
+					local result = self.project_control:save_project_file
+					(
+						options_file_name, 
+						self.options:get_template()
+					)
 					if (result ~= 0) then
 						self.streamer:send_error("could not save project file template", ErrorTypes.io, "")
 					end
 					-- TODO! Send error on stream if patched file could not be saved
 				end
 			else
+				self.streamer:send_warning("Saving template to file", json.encode({
+					content = content
+				}))
 				local result = self.project_control:save_project_file(options_file_name, self.options:get_template())
 				if (result ~= 0) then
 					self.streamer:send_error("could not save project file", ErrorTypes.io, "")
@@ -63,10 +71,39 @@ function Cmake:save_options()
 	return setup_result
 end
 
+function Cmake:load_profiles(comboboxId)
+	local result = self:load_options()
+	local data = {
+		targets = self.options.content.build_targets,
+		toolbarId = self.id,
+		itemId = comboboxId
+	}
+	if (isempty(result) or data == nil) then
+		data.empty = true
+	end
+	self.streamer:remote_call("setComboboxData", json.encode(data))
+end
+
 function Cmake:run_cmake()
 	self:load_options()
-	self.streamer:send_info("run CMake", "")
-	print("run CMake")
+	self.streamer:send_info("running CMake", "")
+	
+	if (isempty(self.build_target)) then
+		return self.streamer:send_error("No build target selected", ErrorTypes.precondition, "")
+	end
+	
+	local target = nil;
+	for	_, targetIt in pairs(self.options.content.build_targets) do
+		if (targetIt.name == self.build_target) then
+			target = targetIt
+			break
+		end
+	end
+	if (target == nil) then
+		return self.streamer:send_error("target not found: " + target, ErrorTypes.precondition, "");
+	end
+	
+	print(target.environment)
 end
 
 function Cmake:build()
@@ -86,9 +123,9 @@ function Cmake:cancel()
 	print("cancel");
 end
 
-function Cmake::show_settings()
-	self.streamer:remote_call("showSettings", json.encode({
-		options_file_name = options_file_name
+function Cmake:show_settings()
+	self.streamer:remote_call("showProjectSettings", json.encode({
+		settingsFile = options_file_name
 	}))
 end
 
@@ -104,7 +141,7 @@ function Cmake:init()
 			entries = 
 			{
 				{
-					label = "save",
+					label = "$Save",
 					pngbase64 = images.save,
 					special_actions = {"save"}
 				},
@@ -112,7 +149,7 @@ function Cmake:init()
 					is_splitter = true
 				},
 				{
-					label = "settings",
+					label = "$ProjectSettings",
 					action = function() Cmake.show_settings(self) end					
 				}
 			}
@@ -250,6 +287,7 @@ function Cmake:init()
 		{
 			id = "buildProfile",
 			type = "ComboBox",
+			load = function() self:load_profiles("buildProfile") end
 		}
 	)
 	self.project_control = ProjectControl:new()
@@ -257,7 +295,7 @@ function Cmake:init()
 	self.streamer = Streamer:new()
 end
 
-function Cmake:callAction(id)
+function Cmake:call_action(id)
 	local anyFound = false
 	for	_, item in pairs(self.items) do
 		if (item.id == id) then
@@ -269,6 +307,13 @@ function Cmake:callAction(id)
 	if (not anyFound) then
 		print("not found")
 	end
+end
+
+function combox_select(id, value)
+	if (id == "buildProfile") then
+		Cmake.build_target = value
+	end
+	print(Cmake.build_target)
 end
 
 function Cmake:new(o)
