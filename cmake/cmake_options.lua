@@ -11,9 +11,10 @@ local CmakeOptions = {
 	build_target_template = {
 		environment = "#default",
 		name = "Debug",
-		cmake_options = "-G\"MSYS_Makefiles\"",
+		cmake_arguments = "-G\"MSYS_Makefiles\"",
 		lower_level_command = "make",
-		lower_level_arguments = "-j12"
+		lower_level_arguments = "-j12",
+		build_directory = "./build/debug"
 	}
 }
 

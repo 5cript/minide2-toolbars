@@ -84,12 +84,18 @@ function Cmake:load_profiles(comboboxId)
 	self.streamer:remote_call("setComboboxData", json.encode(data))
 end
 
-function Cmake:run_cmake()
+function Cmake:pre_execution_work()
 	self:load_options()
-	self.streamer:send_info("running CMake", "")
 	
 	if (isempty(self.build_target)) then
-		return self.streamer:send_error("No build target selected", ErrorTypes.precondition, "")
+		self.streamer:send_error("No build target selected", ErrorTypes.precondition, "")
+		return false
+	end
+	
+	local project_directory = self.project_control:get_project_directory()
+	if (isempty(project_directory)) then
+		self.streamer:send_error("Could not get active project directory", ErrorTypes.precondition, "")
+		return false
 	end
 	
 	local target = nil;
@@ -100,10 +106,74 @@ function Cmake:run_cmake()
 		end
 	end
 	if (target == nil) then
-		return self.streamer:send_error("target not found: " + target, ErrorTypes.precondition, "");
+		self.streamer:send_error("target not found", ErrorTypes.precondition, "")
+		return false
+	end
+	if (target.build_directory == nil) then
+		self.streamer:send_error("target misses build directory ", ErrorTypes.precondition, "")
+		return false
 	end
 	
-	print(target.environment)
+	local env = self.settings_provider:environment(target.environment)
+	
+	local extraArgs = target.cmake_arguments
+	if (extraArgs == nil) then
+		extraArgs = ""
+	end
+	if (target.c_compiler ~= nil) then
+		extraArgs = extraArgs .. " -DCMAKE_C_COMPILER=\"" .. target.c_compiler .. "\""
+	end
+	if (target.cpp_compiler ~= nil) then
+		extraArgs = extraArgs .. " -DCMAKE_CXX_COMPILER=\"" .. target.cpp_compiler .. "\""
+	end
+	if (target.archiver ~= nil) then
+		extraArgs = extraArgs .. " -DCMAKE_AR=\"" .. target.archiver .. "\""
+	end
+	if (target.lower_level_command ~= nil) then
+		extraArgs = extraArgs .. " -DCMAKE_MAKE_PROGRAM=\"" .. target.lower_level_command .. "\""
+	end
+	
+	return {
+		project_directory = project_directory,
+		target = target,
+		env = env,
+		extraArgs = extraArgs
+	}
+end
+
+function Cmake:run_cmake()		
+	-- check if already running
+	if (self.cmakeProcess ~= nil) then
+		local exitStatus = self.cmakeProcess:try_get_exit_status()
+		if (exitStatus == nil) then
+			self.streamer:send_error("cmake is already/still running", ErrorTypes.precondition, "")	
+			return false
+		end
+	end
+	
+	local prework = self:pre_execution_work()
+	if (prework == false) then
+		print("error prework")
+		return
+	end	
+
+	self.streamer:send_info("running CMake", "")
+	self.cmakeProcess = Process:new()
+	local err = self.cmakeProcess:execute
+	(
+		"cmake.exe " .. "-B" .. "\"" .. prework.target.build_directory .. "\" " .. prework.extraArgs,
+		prework.project_directory,
+		prework.env,
+		function (cout) print(cout) end,
+		function (cerr) print(cerr) end,
+		function (exitStatus)
+			self.streamer:send_subprocess_info("cmake", json.encode({
+				what = "processEnded",
+				status = exitStatus
+			}))
+		end
+	)
+	print(err)
 end
 
 function Cmake:build()
@@ -116,7 +186,37 @@ function Cmake:build_run()
 end
 
 function Cmake:run()
-	print("run");
+	print("run")
+	local prework = self:pre_execution_work()
+	if (prework == false) then
+		print("error prework")
+		return
+	end	
+	
+	-- check if already running
+	if (self.printenvProcess ~= nil) then
+		local exitStatus = self.printenvProcess:try_get_exit_status()
+		if (exitStatus == nil) then
+			self.streamer:send_error("printenv is already/still running", ErrorTypes.precondition, "")	
+			return false
+		end
+	end
+
+	self.printenvProcess = Process:new()
+	self.printenvProcess:execute
+	(
+		"ar",
+		prework.project_directory,
+		prework.env,
+		function (cout) print(cout) end,
+		function (cerr) print(cerr) end,
+		function (exitStatus)
+			self.streamer:send_subprocess_info("printenv", json.encode({
+				what = "processEnded",
+				status = exitStatus
+			}))
+		end
+	)
 end
 
 function Cmake:cancel()
@@ -293,6 +393,7 @@ function Cmake:init()
 	self.project_control = ProjectControl:new()
 	self.options = CmakeOptions:new()
 	self.streamer = Streamer:new()
+	self.settings_provider = SettingsProvider:new()
 end
 
 function Cmake:call_action(id)
