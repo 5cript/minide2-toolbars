@@ -161,7 +161,7 @@ function Cmake:run_cmake()
 	self.cmakeProcess = Process:new()
 	local err = self.cmakeProcess:execute
 	(
-		"cmake.exe " .. "-B" .. "\"" .. prework.target.build_directory .. "\" " .. prework.extraArgs,
+		"cmake.exe " .. "-B" .. "\"./" .. prework.target.build_directory .. "\" " .. prework.extraArgs,
 		prework.project_directory,
 		prework.env,
 		function (cout) print(cout) end,
@@ -176,17 +176,7 @@ function Cmake:run_cmake()
 	print(err)
 end
 
-function Cmake:build()
-	print("build");
-end
-
-function Cmake:build_run()
-	self:build();
-	self:run();
-end
-
-function Cmake:run()
-	print("run")
+function Cmake:build()	
 	local prework = self:pre_execution_work()
 	if (prework == false) then
 		print("error prework")
@@ -194,24 +184,97 @@ function Cmake:run()
 	end	
 	
 	-- check if already running
-	if (self.printenvProcess ~= nil) then
-		local exitStatus = self.printenvProcess:try_get_exit_status()
+	if (self.llProcess ~= nil) then
+		local exitStatus = self.llProcess:try_get_exit_status()
 		if (exitStatus == nil) then
-			self.streamer:send_error("printenv is already/still running", ErrorTypes.precondition, "")	
+			self.streamer:send_error
+			(
+				prework.target.lower_level_command .. " is already/still running", 
+				ErrorTypes.precondition, 
+				""
+			)	
 			return false
 		end
 	end
 
-	self.printenvProcess = Process:new()
-	self.printenvProcess:execute
+	self.streamer:send_info("running " .. prework.target.lower_level_command, "")
+	self.llProcess = Process:new()
+	local err = self.llProcess:execute
 	(
-		"ar",
-		prework.project_directory,
+		prework.target.lower_level_command .. " " .. prework.target.lower_level_arguments,
+		prework.project_directory .. "/" .. prework.target.build_directory,
 		prework.env,
 		function (cout) print(cout) end,
 		function (cerr) print(cerr) end,
 		function (exitStatus)
-			self.streamer:send_subprocess_info("printenv", json.encode({
+			self.streamer:send_subprocess_info(prework.target.lower_level_command, json.encode({
+				what = "processEnded",
+				status = exitStatus
+			}))
+		end
+	)
+end
+
+function Cmake:build_run()
+	--self:build();
+	--self:run();
+end
+
+function Cmake:run()
+	print("run")
+	
+	local prework = self:pre_execution_work()
+	if (prework == false) then
+		print("error prework")
+		return
+	end	
+	
+	if (prework.target.output_executable == nil) then
+		self.streamer:send_error
+		(
+			"build target is missing output_executable parameter", 
+			ErrorTypes.precondition, 
+			""
+		)	
+		return
+	end
+	
+	local runParams = ""
+	if (prework.target.run_parameters ~= nil) then
+		runParams = prework.target.run_parameters
+	end
+	
+	
+	local runDir = prework.project_directory 
+	if (prework.target.execution_directory ~= nil) then
+		runDir = runDir .. "/" .. prework.target.execution_directory
+	end
+	
+	-- check if already running
+	if (self.productProcess ~= nil) then
+		local exitStatus = self.productProcess:try_get_exit_status()
+		if (exitStatus == nil) then
+			self.streamer:send_error
+			(
+				prework.target.output_executable .. " is already/still running", 
+				ErrorTypes.precondition, 
+				""
+			)	
+			return false
+		end
+	end
+
+	self.streamer:send_info("running " .. prework.target.output_executable, "")
+	self.productProcess = Process:new()
+	local err = self.productProcess:execute
+	(
+		prework.target.output_executable .. " " .. runParams,
+		runDir,
+		prework.env,
+		function (cout) print(cout) end,
+		function (cerr) print(cerr) end,
+		function (exitStatus)
+			self.streamer:send_subprocess_info(prework.target.output_executable, json.encode({
 				what = "processEnded",
 				status = exitStatus
 			}))

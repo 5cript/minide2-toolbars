@@ -14,7 +14,9 @@ local CmakeOptions = {
 		cmake_arguments = "-G\"MSYS_Makefiles\"",
 		lower_level_command = "make",
 		lower_level_arguments = "-j12",
-		build_directory = "./build/debug"
+		build_directory = "build/debug",
+		c_compiler = "gcc.exe",
+		cpp_compiler = "g++.exe"
 	}
 }
 
