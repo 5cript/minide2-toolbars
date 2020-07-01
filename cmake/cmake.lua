@@ -141,6 +141,18 @@ function Cmake:pre_execution_work()
 	}
 end
 
+function Cmake:is_process_running(process)
+	-- check if already running
+	if (self[process] ~= nil) then
+		local exitStatus = self[process]:try_get_exit_status()
+		if (exitStatus == nil) then
+			return "running"
+		end
+		return "ended"
+	end
+	return "no process"
+end
+
 function Cmake:run_cmake()		
 	-- check if already running
 	if (self.cmakeProcess ~= nil) then
@@ -156,7 +168,12 @@ function Cmake:run_cmake()
 		print("error prework")
 		return
 	end	
+	
+	self.streamer:remote_call("disableItem", json.encode({
+		items = {"runCMake", "build", "run", "buildAndRun", "debug"}
+	}))
 
+	self:clearLog("cmake")
 	self.streamer:send_info("running CMake", "")
 	self.cmakeProcess = Process:new()
 	local err = self.cmakeProcess:execute
@@ -164,8 +181,12 @@ function Cmake:run_cmake()
 		"cmake.exe " .. "-B" .. "\"./" .. prework.target.build_directory .. "\" " .. prework.extraArgs,
 		prework.project_directory,
 		prework.env,
-		function (cout) print(cout) end,
-		function (cerr) print(cerr) end,
+		function (cout) 
+			self.streamer:send_subprocess_stdout("cmake", cout, OutputType.cmake)
+		end,
+		function (cerr) 
+			self.streamer:send_subprocess_stderr("cmake", cerr, OutputType.cmake)
+		end,
 		function (exitStatus)
 			self.streamer:send_subprocess_info("cmake", json.encode({
 				what = "processEnded",
@@ -196,7 +217,12 @@ function Cmake:build()
 			return false
 		end
 	end
+	
+	self.streamer:remote_call("disableItem", json.encode({
+		items = {"runCMake", "build", "run", "buildAndRun", "debug"}
+	}))
 
+	self:clearLog(prework.target.lower_level_command)
 	self.streamer:send_info("running " .. prework.target.lower_level_command, "")
 	self.llProcess = Process:new()
 	local err = self.llProcess:execute
@@ -204,8 +230,12 @@ function Cmake:build()
 		prework.target.lower_level_command .. " " .. prework.target.lower_level_arguments,
 		prework.project_directory .. "/" .. prework.target.build_directory,
 		prework.env,
-		function (cout) print(cout) end,
-		function (cerr) print(cerr) end,
+		function (cout) 
+			self.streamer:send_subprocess_stdout(prework.target.lower_level_command, cout, OutputType.build)
+		end,
+		function (cerr) 
+			self.streamer:send_subprocess_stderr(prework.target.lower_level_command, cerr, OutputType.build)
+		end,
 		function (exitStatus)
 			self.streamer:send_subprocess_info(prework.target.lower_level_command, json.encode({
 				what = "processEnded",
@@ -218,6 +248,11 @@ end
 function Cmake:build_run()
 	--self:build();
 	--self:run();
+end
+
+function Cmake:clearLog(logName)
+	local clearCommand = string.char(0x1b) .. "[2J"
+	self.streamer:send_subprocess_stdout(logName, clearCommand, OutputType.other)	
 end
 
 function Cmake:run()
@@ -263,16 +298,30 @@ function Cmake:run()
 			return false
 		end
 	end
+	
+	self.streamer:remote_call("disableItem", json.encode({
+		items = {"runCMake", "build", "run", "buildAndRun", "debug"}
+	}))
 
+	local runCommand = 
+		prework.project_directory .. "/" ..
+		prework.target.build_directory .. "/" ..
+		prework.target.output_executable .. " " .. runParams
+	;
+	self:clearLog(prework.target.output_executable)
 	self.streamer:send_info("running " .. prework.target.output_executable, "")
 	self.productProcess = Process:new()
 	local err = self.productProcess:execute
 	(
-		prework.target.output_executable .. " " .. runParams,
+		runCommand,
 		runDir,
 		prework.env,
-		function (cout) print(cout) end,
-		function (cerr) print(cerr) end,
+		function (cout) 
+			self.streamer:send_subprocess_stdout(prework.target.output_executable, cout, OutputType.other)
+		end,
+		function (cerr) 
+			self.streamer:send_subprocess_stderr(prework.target.output_executable, cerr, OutputType.other)
+		end,
 		function (exitStatus)
 			self.streamer:send_subprocess_info(prework.target.output_executable, json.encode({
 				what = "processEnded",
@@ -280,6 +329,13 @@ function Cmake:run()
 			}))
 		end
 	)
+	if (err ~= 0) then
+		self.streamer:send_subprocess_info(prework.target.output_executable, json.encode({
+			what = "processStartFailure",
+			error = err,
+			command = runCommand
+		}))
+	end
 end
 
 function Cmake:cancel()
@@ -417,7 +473,8 @@ function Cmake:init()
 			id = "nextLine",
 			special_actions = {"cpp_debug_next_line"},
 			type = "IconButton",
-			pngbase64 = images.next_line
+			pngbase64 = images.next_line,
+			disabled_by_default = true
 		}
 	)
 	libtoolbar.push_item
@@ -427,7 +484,8 @@ function Cmake:init()
 			id = "stepInto",
 			special_actions = {"cpp_debug_step_into"},
 			type = "IconButton",
-			pngbase64 = images.step_into
+			pngbase64 = images.step_into,
+			disabled_by_default = true
 		}
 	)
 	libtoolbar.push_item
@@ -437,7 +495,8 @@ function Cmake:init()
 			id = "stepOut",
 			special_actions = {"cpp_debug_step_out"},
 			type = "IconButton",
-			pngbase64 = images.step_out
+			pngbase64 = images.step_out,
+			disabled_by_default = true
 		}
 	)
 	libtoolbar.push_splitter
