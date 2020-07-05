@@ -173,7 +173,7 @@ function Cmake:run_cmake()
 		items = {"runCMake", "build", "run", "buildAndRun", "debug"}
 	}))
 
-	self:clearLog("cmake")
+	self:clearLog("cmake", OutputType.cmake)
 	self.streamer:send_info("running CMake", "")
 	self.cmakeProcess = Process:new()
 	local err = self.cmakeProcess:execute
@@ -222,7 +222,7 @@ function Cmake:build()
 		items = {"runCMake", "build", "run", "buildAndRun", "debug"}
 	}))
 
-	self:clearLog(prework.target.lower_level_command)
+	self:clearLog(prework.target.lower_level_command, OutputType.build)
 	self.streamer:send_info("running " .. prework.target.lower_level_command, "")
 	self.llProcess = Process:new()
 	local err = self.llProcess:execute
@@ -250,9 +250,9 @@ function Cmake:build_run()
 	--self:run();
 end
 
-function Cmake:clearLog(logName)
+function Cmake:clearLog(logName, type)
 	local clearCommand = string.char(0x1b) .. "[2J"
-	self.streamer:send_subprocess_stdout(logName, clearCommand, OutputType.build)	
+	self.streamer:send_subprocess_stdout(logName, clearCommand, type)	
 end
 
 function Cmake:run()
@@ -308,7 +308,7 @@ function Cmake:run()
 		prework.target.build_directory .. "/" ..
 		prework.target.output_executable .. " " .. runParams
 	;
-	self:clearLog(prework.target.output_executable)
+	self:clearLog(prework.target.output_executable, OutputType.other)
 	self.streamer:send_info("running " .. prework.target.output_executable, "")
 	self.productProcess = Process:new()
 	local err = self.productProcess:execute
