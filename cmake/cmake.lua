@@ -252,7 +252,7 @@ end
 
 function Cmake:clearLog(logName)
 	local clearCommand = string.char(0x1b) .. "[2J"
-	self.streamer:send_subprocess_stdout(logName, clearCommand, OutputType.other)	
+	self.streamer:send_subprocess_stdout(logName, clearCommand, OutputType.build)	
 end
 
 function Cmake:run()
