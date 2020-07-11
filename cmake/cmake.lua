@@ -2,6 +2,7 @@ local libtoolbar = require "libtoolbar"
 local images = require "images"
 local CmakeOptions = require "cmake_options"
 local json = require "json"
+local MakeParser = require "make_output_parser"
 
 local options_file_name = "cmake.json"
 
@@ -346,6 +347,16 @@ function Cmake:show_settings()
 	self.streamer:remote_call("showProjectSettings", json.encode({
 		settingsFile = options_file_name
 	}))
+end
+
+function Cmake:on_log_double_click(name, line, lineContent)
+	local parser = MakeParser()
+	local result = parser:parse_line(lineContent);
+	if (result == false) then
+		print("failed to parse log line")
+	else
+		self.project_control:open_file_at(result.file, result.line, result.column, result.message)
+	end
 end
 
 function Cmake:init()
