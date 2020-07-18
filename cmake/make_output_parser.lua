@@ -15,20 +15,29 @@ function MakeParser:parse_line(line)
 			value = v
 		})
 	end
-	local tokenCount = #tokens;
+	
+	local tokenOffset = 1
 	local isWindowsDrivePath = false;
 	local windowsDriveLetter = '';
-	if (tokenCount > 2) then
-		if (is_upper(tokens[1].value) and tokens[2].value == ":") then
-			isWindowsDrivePath = true
-			windowsDriveLetter = tokens[1].value
+	for i=1,#tokens do
+		if tokens[i].value == "/" or tokens[i].value == "\\" then
+			break;
 		end
+		tokenOffset = tokenOffset + 1;
+	end
+	if (tokenOffset > 2) then
+		if (tokens[tokenOffset - 1].value == ":" and is_upper(tokens[tokenOffset - 2].value)) then
+			isWindowsDrivePath = true
+			windowsDriveLetter = tokens[tokenOffset - 2].value
+		end		
+	end
+	if (tokenOffset >= #tokens) then
+		return nil;
 	end
 	
-	local searchStart = 1;
+	local searchStart = tokenOffset;
 	local path = ""
 	if (isWindowsDrivePath) then
-		searchStart = 3;
 		path = windowsDriveLetter .. ":"
 	end
 	
@@ -42,9 +51,47 @@ function MakeParser:parse_line(line)
 		end
 	end
 	
-	local lineNumber = tokens[firstColon + 1].value;
-	local column = tokens[firstColon + 3].value;
-	local message = line:sub((path .. ":" .. tostring(lineNumber) .. ":" .. tostring(column) .. ":"):len() + 2, line:len())
+	local lineNumber = nil;
+	if firstColon + 1 < #tokens then
+		lineNumber = tonumber(tokens[firstColon + 1].value)
+	end
+	
+	local column = nil;
+	if (lineNumber ~= nil) then
+		if firstColon + 3 <= #tokens and tokens[firstColon + 3].value then
+			column = tonumber(tokens[firstColon + 3].value)
+		end
+	end
+	local message = ""
+	local messageStart = firstColon + 1
+	if (lineNumber ~= nil) then
+		messageStart = messageStart + 2
+	end
+	if (column ~= nil) then
+		messageStart = messageStart + 2
+	end
+	
+	for i = messageStart,#tokens do
+		message = message .. tokens[i].value .. " "
+	end
+	
+	if (column == nil) then
+		column = 0
+	end
+	if (lineNumber == nil) then
+		lineNumber = 0
+	end
+	
+	--[[
+	print("------------")
+	print(line)
+	print(path)
+	print(lineNumber)
+	print(column)
+	print(message)
+	print("------------")
+	]]--
+	
 	return {
 		file = path,
 		line = lineNumber,

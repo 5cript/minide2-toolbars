@@ -352,7 +352,7 @@ end
 function Cmake:on_log_double_click(name, line, lineContent)
 	local parser = MakeParser()
 	local result = parser:parse_line(lineContent);
-	if (result == false) then
+	if (result == false or result == nil) then
 		print("failed to parse log line")
 	else
 		self.project_control:open_file_at(result.file, result.line, result.column, result.message)
