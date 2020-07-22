@@ -193,6 +193,7 @@ function Cmake:run_cmake()
 				what = "processEnded",
 				status = exitStatus
 			}))
+			self:actionCompleted("runCMake");
 		end
 	)
 	print(err)
@@ -242,6 +243,7 @@ function Cmake:build()
 				what = "processEnded",
 				status = exitStatus
 			}))
+			self:actionCompleted("build");
 		end
 	)
 end
@@ -255,6 +257,14 @@ function Cmake:clearLog(logName, type)
 	local clearCommand = string.char(0x1b) .. "[2J"
 	self.streamer:send_subprocess_stdout(logName, clearCommand, type)	
 end
+
+function Cmake:actionCompleted(itemId)
+	self.streamer:remote_call("actionCompleted", json.encode({
+		toolbarId = self.id,
+		itemId = itemId
+	}))
+end
+	
 
 function Cmake:run()
 	print("run")
@@ -328,6 +338,7 @@ function Cmake:run()
 				what = "processEnded",
 				status = exitStatus
 			}))
+			self:actionCompleted("run");
 		end
 	)
 	if (err ~= 0) then
@@ -420,7 +431,9 @@ function Cmake:init()
 			id = "runCMake",
 			action = function() Cmake.run_cmake(self) end,
 			type = "IconButton",
-			pngbase64 = images.cmake
+			pngbase64 = images.cmake,
+			cancelable = true,
+			disables = {"build", "buildAndRun", "run", "debug", "runCMake"}
 		}
 	)
 	libtoolbar.push_item
@@ -430,7 +443,9 @@ function Cmake:init()
 			id = "build",
 			action = function() Cmake.build(self) end,
 			type = "IconButton",
-			pngbase64 = images.build
+			pngbase64 = images.build,
+			cancelable = true,
+			disables = {"build", "buildAndRun", "run", "debug", "runCMake"}
 		}
 	)
 	libtoolbar.push_item
@@ -440,7 +455,9 @@ function Cmake:init()
 			id = "buildAndRun",
 			action = function() Cmake.build_run(self) end,
 			type = "IconButton",
-			pngbase64 = images.build_run
+			pngbase64 = images.build_run,
+			cancelable = true,
+			disables = {"build", "buildAndRun", "run", "debug", "runCMake"}
 		}
 	)
 	libtoolbar.push_item
@@ -450,7 +467,9 @@ function Cmake:init()
 			id = "run",
 			action = function() Cmake.run(self) end,
 			type = "IconButton",
-			pngbase64 = images.run
+			pngbase64 = images.run,
+			cancelable = true,
+			disables = {"build", "buildAndRun", "run", "debug", "runCMake"}
 		}
 	)
 	libtoolbar.push_item
@@ -474,7 +493,8 @@ function Cmake:init()
 			id = "debug",
 			special_actions = {"cpp_debug"},
 			type = "IconButton",
-			pngbase64 = images.debug
+			pngbase64 = images.debug,
+			disables = {"build", "buildAndRun", "run", "debug", "runCMake"}
 		}
 	)
 	libtoolbar.push_item
