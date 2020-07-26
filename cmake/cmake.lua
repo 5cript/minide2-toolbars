@@ -7,7 +7,10 @@ local MakeParser = require "make_output_parser"
 local options_file_name = "cmake.json"
 
 Cmake = {
-	items = {}
+	items = {},
+	buildSectionData = {
+		disableMask = {"build", "buildAndRun", "run", "debug", "runCMake", "clean"}
+	}
 }
 
 local function isempty(s)
@@ -154,7 +157,17 @@ function Cmake:is_process_running(process)
 	return "no process"
 end
 
-function Cmake:run_cmake()		
+function Cmake:cancel_cmake(force) 
+	-- check if already running
+	if (self.cmakeProcess ~= nil) then
+		local exitStatus = self.cmakeProcess:try_get_exit_status()
+		if (exitStatus == nil) then
+			self.cmakeProcess:kill(force)
+		end
+	end	
+end
+
+function Cmake:run_cmake(onFinish)		
 	-- check if already running
 	if (self.cmakeProcess ~= nil) then
 		local exitStatus = self.cmakeProcess:try_get_exit_status()
@@ -167,7 +180,7 @@ function Cmake:run_cmake()
 	local prework = self:pre_execution_work()
 	if (prework == false) then
 		print("error prework")
-		return
+		return false
 	end	
 	
 	self.streamer:remote_call("disableItem", json.encode({
@@ -193,13 +206,34 @@ function Cmake:run_cmake()
 				what = "processEnded",
 				status = exitStatus
 			}))
-			self:actionCompleted("runCMake");
+			if (onFinish ~= nil) then
+				onFinish(exitStatus);
+			else
+				self:actionCompleted("runCMake");
+			end
 		end
 	)
-	print(err)
+	if (err ~= 0) then
+		return false
+	end
+	return true;
 end
 
-function Cmake:build()	
+function Cmake:cancel_build(force) 
+	-- check if already running
+	print("cancel_build")
+	if (self.llProcess ~= nil) then
+		print("llProcess is not nil")
+		local exitStatus = self.llProcess:try_get_exit_status()
+		print(exitStatus);
+		if (exitStatus == nil) then
+			print("llProcess exit status is nil, killing now")
+			self.llProcess:kill(force)
+		end
+	end	
+end
+
+function Cmake:build(onFinish)	
 	local prework = self:pre_execution_work()
 	if (prework == false) then
 		print("error prework")
@@ -243,12 +277,39 @@ function Cmake:build()
 				what = "processEnded",
 				status = exitStatus
 			}))
-			self:actionCompleted("build");
+			if (onFinish ~= nil) then
+				onFinish(exitStatus);
+			else
+				self:actionCompleted("build");
+			end
 		end
 	)
+	if (err ~= 0) then
+		return false
+	end
+	return true
 end
 
-function Cmake:build_run()
+function Cmake:build_run(cancel)
+	if cancel then
+		return true;
+	end
+	
+	return self:run_cmake(function(exitStatus) 
+		if (exitStatus ~= 0) then
+			self:actionCompleted("buildAndRun")
+			return;
+		end
+		self:build(function(exitStatus)
+			if (exitStatus ~= 0) then
+				self:actionCompleted("buildAndRun")
+				return;
+			end
+			self:run(function(exitStatus)
+				self:actionCompleted("buildAndRun");
+			end)
+		end)
+	end)
 	--self:build();
 	--self:run();
 end
@@ -266,13 +327,23 @@ function Cmake:actionCompleted(itemId)
 end
 	
 
-function Cmake:run()
+function Cmake:cancel_run(force) 
+	-- check if already running
+	if (self.productProcess ~= nil) then
+		local exitStatus = self.productProcess:try_get_exit_status()
+		if (exitStatus == nil) then
+			self.productProcess:kill(force)
+		end
+	end	
+end
+
+function Cmake:run(onFinish)
 	print("run")
 	
 	local prework = self:pre_execution_work()
 	if (prework == false) then
 		print("error prework")
-		return
+		return false
 	end	
 	
 	if (prework.target.output_executable == nil) then
@@ -338,7 +409,11 @@ function Cmake:run()
 				what = "processEnded",
 				status = exitStatus
 			}))
-			self:actionCompleted("run");
+			if (onFinish ~= nil) then
+				onFinish(exitStatus);
+			else
+				self:actionCompleted("run");
+			end
 		end
 	)
 	if (err ~= 0) then
@@ -347,7 +422,76 @@ function Cmake:run()
 			error = err,
 			command = runCommand
 		}))
+		return false
 	end
+	return true
+end
+
+function Cmake:cancel_clean(self, force)
+	-- check if already running
+	if (self.cleanProcess ~= nil) then
+		local exitStatus = self.cleanProcess:try_get_exit_status()
+		if (exitStatus == nil) then
+			self.cleanProcess:kill(force)
+		end
+	end		
+end
+
+function Cmake:clean(onFinish)	
+	local prework = self:pre_execution_work()
+	if (prework == false) then
+		print("error prework")
+		return
+	end	
+	
+	-- check if already running
+	if (self.cleanProcess ~= nil) then
+		local exitStatus = self.cleanProcess:try_get_exit_status()
+		if (exitStatus == nil) then
+			self.streamer:send_error
+			(
+				prework.target.clean_command .. " is already/still running", 
+				ErrorTypes.precondition, 
+				""
+			)	
+			return false
+		end
+	end
+	
+	self.streamer:remote_call("disableItem", json.encode({
+		items = {"runCMake", "build", "run", "buildAndRun", "debug"}
+	}))
+
+	self:clearLog("clean", OutputType.other)
+	self.streamer:send_info("running " .. prework.target.clean_command, "")
+	self.cleanProcess = Process:new()
+	local err = self.cleanProcess:execute
+	(
+		prework.target.clean_command,
+		prework.project_directory .. "/" .. prework.target.build_directory,
+		prework.env,
+		function (cout) 
+			self.streamer:send_subprocess_stdout("clean", cout, OutputType.other)
+		end,
+		function (cerr) 
+			self.streamer:send_subprocess_stderr("clean", cerr, OutputType.other)
+		end,
+		function (exitStatus)
+			self.streamer:send_subprocess_info("clean", json.encode({
+				what = "processEnded",
+				status = exitStatus
+			}))
+			if (onFinish ~= nil) then
+				onFinish(exitStatus);
+			else
+				self:actionCompleted("clean");
+			end
+		end
+	)
+	if (err ~= 0) then
+		return false
+	end
+	return true
 end
 
 function Cmake:cancel()
@@ -391,7 +535,7 @@ function Cmake:init()
 				},
 				{
 					label = "$ProjectSettings",
-					action = function() Cmake.show_settings(self) end					
+					action = function() return Cmake.show_settings(self) end					
 				}
 			}
 		}
@@ -429,11 +573,12 @@ function Cmake:init()
 		self,
 		{
 			id = "runCMake",
-			action = function() Cmake.run_cmake(self) end,
+			action = function() return Cmake.run_cmake(self) end,
 			type = "IconButton",
 			pngbase64 = images.cmake,
 			cancelable = true,
-			disables = {"build", "buildAndRun", "run", "debug", "runCMake"}
+			cancel = function(force) Cmake.cancel_cmake(self, force) end,
+			disables = Cmake.buildSectionData.disableMask
 		}
 	)
 	libtoolbar.push_item
@@ -441,11 +586,12 @@ function Cmake:init()
 		self,
 		{
 			id = "build",
-			action = function() Cmake.build(self) end,
+			action = function() return Cmake.build(self) end,
 			type = "IconButton",
 			pngbase64 = images.build,
 			cancelable = true,
-			disables = {"build", "buildAndRun", "run", "debug", "runCMake"}
+			cancel = function(force) Cmake.cancel_build(self, force) end,
+			disables = Cmake.buildSectionData.disableMask
 		}
 	)
 	libtoolbar.push_item
@@ -453,11 +599,12 @@ function Cmake:init()
 		self,
 		{
 			id = "buildAndRun",
-			action = function() Cmake.build_run(self) end,
+			action = function() return Cmake.build_run(self, false) end,
 			type = "IconButton",
 			pngbase64 = images.build_run,
 			cancelable = true,
-			disables = {"build", "buildAndRun", "run", "debug", "runCMake"}
+			cancel = function() return Cmake.build_run(self, true) end,
+			disables = Cmake.buildSectionData.disableMask
 		}
 	)
 	libtoolbar.push_item
@@ -465,21 +612,25 @@ function Cmake:init()
 		self,
 		{
 			id = "run",
-			action = function() Cmake.run(self) end,
+			action = function() return Cmake.run(self) end,
 			type = "IconButton",
 			pngbase64 = images.run,
 			cancelable = true,
-			disables = {"build", "buildAndRun", "run", "debug", "runCMake"}
+			cancel = function(force) Cmake.cancel_run(self, force) end,
+			disables = Cmake.buildSectionData.disableMask
 		}
 	)
 	libtoolbar.push_item
 	(
 		self,
 		{
-			id = "cancel",
-			action = function() Cmake.cancel(self) end,
+			id = "clean",
+			action = function() return Cmake.clean(self) end,
 			type = "IconButton",
-			pngbase64 = images.cancel
+			pngbase64 = images.clean,
+			cancelable = true,
+			cancel = function(force) Cmake.cancel_clean(self, force) end,
+			disables = Cmake.buildSectionData.disableMask
 		}
 	)
 	libtoolbar.push_splitter
@@ -494,7 +645,7 @@ function Cmake:init()
 			special_actions = {"cpp_debug"},
 			type = "IconButton",
 			pngbase64 = images.debug,
-			disables = {"build", "buildAndRun", "run", "debug", "runCMake"}
+			disables = Cmake.buildSectionData.disableMask
 		}
 	)
 	libtoolbar.push_item
