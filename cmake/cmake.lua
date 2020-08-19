@@ -514,9 +514,131 @@ function Cmake:on_log_double_click(name, line, lineContent)
 	end
 end
 
+function Cmake:new_target() 
+	local inputSpecification = {
+		dictionary = 'cmake_toolbar',
+		categories = {
+			{
+				id = "essentials",
+				label = "$Essentials",
+				border_color = "lime"
+			},
+			{
+				id = "commands",
+				label = "$Commands",
+				border_color = "yellow"
+			}
+		},
+		fields = {
+			{
+				id = "name",
+				label = "$TargetName",
+				type = "text",
+				multiline = "single",
+				maybeEmpty = false,
+				category = "essentials"
+			},
+			{
+				id = "environment",
+				label = "$Environment",
+				type = "environment",
+				maybeEmpty = false,
+				category = "essentials"
+			},
+			{
+				id = "cmake_arguments",
+				label = "$CMakeArguments",
+				type = "text",
+				multiline = "remove_breaks",
+				maybeEmpty = true,
+				category = "commands"
+			},
+			{
+				id = "ll_command",
+				label = "$LowerLevelCommand",
+				type = "text",
+				multiline = "single",
+				maybeEmpty = false,
+				default = "make",
+				category = "commands"
+			},
+			{
+				id = "ll_arguments",
+				label = "$LowerLevelArguments",
+				type = "text",
+				multiline = "remove_breaks",
+				maybeEmpty = true,
+				category = "commands"
+			},
+			{
+				id = "build_directory",
+				label = "$BuildDirectory",
+				type = "text",
+				multiline = "single",
+				maybeEmpty = false,
+				default = "build",
+				category = "essentials"
+			},
+			{
+				id = "clean_command",
+				label = "$CleanCommand",
+				type = "text",
+				multiline = "single",
+				maybeEmpty = true,
+				default = "make clean",
+				category = "commands"
+			},
+			{
+				id = "c_compiler",
+				label = "$CCompiler",
+				type = "text",
+				multiline = "single",
+				maybeEmpty = true,
+				category = "commands"
+			},
+			{
+				id = "cpp_compiler",
+				label = "$CppCompiler",
+				type = "text",
+				multiline = "single",
+				maybeEmpty = true,
+				category = "commands"
+			},
+			{
+				id = "output_executable",
+				label = "$OutputExecuteable",
+				type = "text",
+				multiline = "single",
+				maybeEmpty = true,
+				category = "essentials"
+			},
+			{
+				id = "run_parameters",
+				label = "$RunParameters",
+				type = "text",
+				multiline = "single",
+				maybeEmpty = true,
+				category = "essentials"
+			},
+			{
+				id = "execution_directory",
+				label = "$ExecutionDirectory",
+				type = "text",
+				multiline = "single",
+				maybeEmpty = true,
+				default = ".",
+				category = "essentials"
+			}
+		}
+	}
+
+	self.streamer:create_input_form("create_target", json.encode(inputSpecification))
+end
+
 function Cmake:init()
 	self.name = "CMake C/C++";
 	self.id = "cmake_toolbar";
+	self.dictionary = "cmake_toolbar";
 	libtoolbar.push_item
 	(
 		self,
@@ -536,6 +658,10 @@ function Cmake:init()
 				{
 					label = "$ProjectSettings",
 					action = function() return Cmake.show_settings(self) end					
+				},
+				{
+					label = "$AddNewTarget",
+					action = function() return Cmake.new_target(self) end
 				}
 			}
 		}
