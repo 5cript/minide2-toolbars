@@ -3,6 +3,7 @@ local images = require "images"
 local CmakeOptions = require "cmake_options"
 local json = require "json"
 local MakeParser = require "make_output_parser"
+--local pretty = require "pl.pretty"
 
 local options_file_name = "cmake.json"
 
@@ -515,8 +516,15 @@ function Cmake:on_log_double_click(name, line, lineContent)
 end
 
 function Cmake:new_target() 
+	local envs = self.settings_provider:environments()
+	--print(pretty.dump(envs))
+	for _, env in ipairs(envs) do
+		print(env)
+	end
+
 	local inputSpecification = {
 		dictionary = 'cmake_toolbar',
+		environments = envs,
 		categories = {
 			{
 				id = "essentials",
