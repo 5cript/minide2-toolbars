@@ -3,9 +3,9 @@ local images = require "images"
 local CmakeOptions = require "cmake_options"
 local json = require "json"
 local MakeParser = require "make_output_parser"
---local pretty = require "pl.pretty"
 
 local options_file_name = "cmake.json"
+local run_config_name = "run.json"
 
 Cmake = {
 	items = {},
@@ -79,7 +79,7 @@ end
 function Cmake:load_profiles(comboboxId)
 	local result = self:load_options()
 	local data = {
-		targets = self.options.content.build_targets,
+		items = self.options.content.build_targets,
 		toolbarId = self.id,
 		itemId = comboboxId
 	}
@@ -87,6 +87,36 @@ function Cmake:load_profiles(comboboxId)
 		data.empty = true
 	end
 	self.streamer:remote_call("setComboboxData", json.encode(data))
+end
+
+function Cmake:load_run_profiles(comboboxId)
+	print("1")
+	self.project_control:update()
+	local names = {}
+	local setup_result = self:setup_options();
+	-- No error? Continue then
+	print("a")
+	if (isempty(setup_result)) then
+		local content = self.project_control:read_project_file(run_config_name)
+		-- Load config if existing
+		print("b")
+		if (not isempty(content)) then
+			print("c")
+			self.run_profiles = json.decode(content)
+			for k,v in pairs(self.run_profiles) do
+				if (k == "name") then
+					table.insert(names, v)
+				end
+			end
+		end
+	end
+	local data = {
+		items = names,
+		toolbarId = self.id,
+		itemId = comboboxId
+	}
+	self.streamer:remote_call("setComboboxData", json.encode(data))
+	return names
 end
 
 function Cmake:pre_execution_work()
@@ -826,6 +856,16 @@ function Cmake:init()
 			id = "buildProfile",
 			type = "ComboBox",
 			load = function() self:load_profiles("buildProfile") end
+		}
+	)
+	libtoolbar.push_item
+	(
+		self,
+		{
+			id = "runProfile",
+			type = "ComboBox",
+			managed = "run_profiles",
+			load = function() self:load_run_profiles("runProfile") end
 		}
 	)
 	self.project_control = ProjectControl:new()
