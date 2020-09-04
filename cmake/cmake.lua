@@ -92,7 +92,7 @@ end
 function Cmake:load_run_profiles(comboboxId)
 	print("1")
 	self.project_control:update()
-	local names = {}
+	local items = {}
 	local setup_result = self:setup_options();
 	-- No error? Continue then
 	print("a")
@@ -103,20 +103,18 @@ function Cmake:load_run_profiles(comboboxId)
 		if (not isempty(content)) then
 			print("c")
 			self.run_profiles = json.decode(content)
-			for k,v in pairs(self.run_profiles) do
-				if (k == "name") then
-					table.insert(names, v)
-				end
+			for _,v in pairs(self.run_profiles.configurations) do
+				table.insert(items, v)
 			end
 		end
 	end
 	local data = {
-		items = names,
+		items = items,
 		toolbarId = self.id,
 		itemId = comboboxId
 	}
 	self.streamer:remote_call("setComboboxData", json.encode(data))
-	return names
+	return items
 end
 
 function Cmake:pre_execution_work()
@@ -891,6 +889,9 @@ end
 function combox_select(id, value)
 	if (id == "buildProfile") then
 		Cmake.build_target = value
+	end
+	if (id == "runProfile") then
+		Cmake.run_profile = value
 	end
 	print(Cmake.build_target)
 end
