@@ -723,7 +723,7 @@ function Cmake:init()
 		self,
 		{
 			id = "saveAll",
-			special_actions = {"saveAll"},
+			special_actions = {"save_all"},
 			type = "IconButton",
 			pngbase64 = images.save_all
 		}
@@ -809,7 +809,7 @@ function Cmake:init()
 			special_actions = {"cpp_debug"},
 			type = "IconButton",
 			pngbase64 = images.debug,
-			disables = Cmake.buildSectionData.disableMask
+			action = function() return true end
 		}
 	)
 	libtoolbar.push_item
